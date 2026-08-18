@@ -746,7 +746,7 @@ function SettingsView({ bootstrap, onSaved }: { bootstrap: SwitcherBootstrap; on
   const [saving, setSaving] = useState(false);
   return (
     <div className="single-view settings-view">
-      <ViewHeader eyebrow="PREFERENCES" title="设置" description="控制 CODEX_HOME、会话迁移范围和本地备份保留策略。" actions={<button className="button" disabled={saving} onClick={() => {
+      <ViewHeader eyebrow="PREFERENCES" title="设置" description="控制 CODEX_HOME 和本地备份保留策略。全部本地对话始终受到保护。" actions={<button className="button" disabled={saving} onClick={() => {
         setSaving(true);
         void switcherApi.saveSettings(settings).then((data) => {
           onSaved(data);
@@ -757,14 +757,9 @@ function SettingsView({ bootstrap, onSaved }: { bootstrap: SwitcherBootstrap; on
         <Field label="CODEX_HOME 覆盖路径" hint={`留空使用环境变量或默认路径：${bootstrap.runtime.codexHome}`}>
           <input value={settings.codexHomeOverride ?? ""} onChange={(event) => setSettings({ ...settings, codexHomeOverride: event.target.value || null })} placeholder="%USERPROFILE%\.codex" />
         </Field>
-        <div className="form-grid two">
-          <Field label="历史会话迁移天数" hint="0 表示不迁移，最大 30 天">
-            <div className="number-field"><input min={0} max={30} type="number" value={settings.sessionMigrationDays} onChange={(event) => setSettings({ ...settings, sessionMigrationDays: Number(event.target.value) })} /><span>天</span></div>
-          </Field>
-          <Field label="保留备份数量" hint="超过后自动删除最旧备份">
-            <div className="number-field"><input min={1} max={50} type="number" value={settings.backupRetention} onChange={(event) => setSettings({ ...settings, backupRetention: Number(event.target.value) })} /><span>份</span></div>
-          </Field>
-        </div>
+        <Field label="保留备份数量" hint="超过后自动删除最旧备份">
+          <div className="number-field"><input min={1} max={50} type="number" value={settings.backupRetention} onChange={(event) => setSettings({ ...settings, backupRetention: Number(event.target.value) })} /><span>份</span></div>
+        </Field>
         <Field label="新 Provider 默认行为">
           <label className="toggle-row">
             <input checked={settings.injectModelsDefault} onChange={(event) => setSettings({ ...settings, injectModelsDefault: event.target.checked })} type="checkbox" />
@@ -832,7 +827,7 @@ function PreviewDialog({ preview, busy, onCancel, onConfirm }: { preview: Switch
       <div className="modal">
         <div className="modal-icon"><RotateCcw size={20} /></div>
         <h2>切换到 {preview.profileName}</h2>
-        <p>应用将备份 Codex 数据、写入 Provider 配置、迁移最近 {preview.sessionMigrationDays} 天会话并重启 Codex。</p>
+        <p>应用将完整备份 Codex 数据，同步全部活动与归档对话到新 Provider，然后重启 Codex。</p>
         <dl className="preview-grid">
           <div><dt>Provider ID</dt><dd>{preview.providerId}</dd></div>
           <div><dt>CODEX_HOME</dt><dd>{preview.codexHome}</dd></div>

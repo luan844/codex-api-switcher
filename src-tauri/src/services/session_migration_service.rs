@@ -1,11 +1,9 @@
-use std::collections::HashSet;
 use std::fs::{self, File};
 use std::io::{BufRead, BufReader, Write};
 use std::path::{Path, PathBuf};
 use std::thread;
 use std::time::Duration as StdDuration;
 
-use chrono::{Duration, Local};
 use regex::Regex;
 use rusqlite::Connection;
 use serde::Serialize;
@@ -28,10 +26,9 @@ codex_directory = sys.argv[2]
 with open(payload_path, "r", encoding="utf-8") as handle:
     payload = json.load(handle)
 
-session_ids = [session_id for session_id in payload.get("SessionIds", []) if session_id]
 model_provider = payload.get("ModelProvider")
 
-if not model_provider or not session_ids:
+if not model_provider:
     sys.exit(0)
 
 db_path = os.path.join(codex_directory, "state_5.sqlite")
@@ -45,10 +42,7 @@ for attempt in range(3):
         cursor = connection.cursor()
         cursor.execute("PRAGMA busy_timeout = 5000")
         cursor.execute("BEGIN IMMEDIATE")
-        cursor.executemany(
-            "UPDATE threads SET model_provider = ? WHERE id = ?",
-            [(model_provider, session_id) for session_id in session_ids],
-        )
+        cursor.execute("UPDATE threads SET model_provider = ?", (model_provider,))
         connection.commit()
         break
     except sqlite3.OperationalError as ex:
@@ -87,61 +81,36 @@ impl SessionMigrationService {
         target: &TargetContext,
         provider_category: ProviderCategory,
         api_key_provider_name: &str,
-        session_migration_days: i32,
     ) -> AppResult<()> {
-        if session_migration_days <= 0 {
-            return Ok(());
-        }
-
-        let days = session_migration_days.clamp(1, 30);
-        let sessions_root = target.codex_directory_path.join("sessions");
-        if !sessions_root.exists() {
-            return Ok(());
-        }
-
         let target_provider = if provider_category == ProviderCategory::OpenAI {
             "openai".to_string()
         } else {
             api_key_provider_name.to_string()
         };
-        let mut session_ids = HashSet::new();
-
-        for offset in 0..days {
-            let date = Local::now().date_naive() - Duration::days(offset as i64);
-            let day_dir = sessions_root
-                .join(date.format("%Y").to_string())
-                .join(date.format("%m").to_string())
-                .join(date.format("%d").to_string());
-
-            if !day_dir.exists() {
+        for directory in ["sessions", "archived_sessions"] {
+            let root = target.codex_directory_path.join(directory);
+            if !root.exists() {
                 continue;
             }
-
-            for entry in fs::read_dir(day_dir)? {
-                let entry = entry?;
-                if !entry.file_type()?.is_file() {
-                    continue;
-                }
-                if entry.path().extension().and_then(|item| item.to_str()) != Some("jsonl") {
-                    continue;
-                }
-
-                if let Some(session_id) =
-                    self.rewrite_session_first_line(&entry.path(), &target_provider)?
-                {
-                    session_ids.insert(session_id);
+            let mut pending = vec![root];
+            while let Some(current) = pending.pop() {
+                for entry in fs::read_dir(current)? {
+                    let entry = entry?;
+                    if entry.file_type()?.is_dir() {
+                        pending.push(entry.path());
+                    } else if entry.path().extension().and_then(|item| item.to_str())
+                        == Some("jsonl")
+                    {
+                        self.rewrite_session_first_line(&entry.path(), &target_provider)?;
+                    }
                 }
             }
-        }
-
-        if session_ids.is_empty() {
-            return Ok(());
         }
 
         if target.wsl_environment.is_some() && target.codex_linux_path.is_some() {
-            self.rewrite_wsl_sqlite(target, &target_provider, session_ids)?;
+            self.rewrite_wsl_sqlite(target, &target_provider)?;
         } else {
-            self.rewrite_local_sqlite(&target.codex_directory_path, &target_provider, session_ids)?;
+            self.rewrite_local_sqlite(&target.codex_directory_path, &target_provider)?;
         }
 
         Ok(())
@@ -207,7 +176,6 @@ impl SessionMigrationService {
         &self,
         codex_directory_path: &PathBuf,
         target_provider: &str,
-        session_ids: HashSet<String>,
     ) -> AppResult<()> {
         let sqlite_path = codex_directory_path.join("state_5.sqlite");
         if !sqlite_path.exists() {
@@ -215,7 +183,7 @@ impl SessionMigrationService {
         }
 
         for attempt in 0..3 {
-            match self.try_rewrite_local_sqlite(&sqlite_path, target_provider, &session_ids) {
+            match self.try_rewrite_local_sqlite(&sqlite_path, target_provider) {
                 Ok(()) => return Ok(()),
                 Err(error) => {
                     let detail = error.to_string().to_lowercase();
@@ -235,28 +203,16 @@ impl SessionMigrationService {
         &self,
         sqlite_path: &Path,
         target_provider: &str,
-        session_ids: &HashSet<String>,
     ) -> rusqlite::Result<()> {
         let mut connection = Connection::open(sqlite_path)?;
         connection.busy_timeout(StdDuration::from_secs(5))?;
         let transaction = connection.transaction()?;
-        {
-            let mut statement =
-                transaction.prepare("UPDATE threads SET model_provider = ?1 WHERE id = ?2")?;
-            for session_id in session_ids {
-                statement.execute((target_provider, session_id))?;
-            }
-        }
+        transaction.execute("UPDATE threads SET model_provider = ?1", [target_provider])?;
         transaction.commit()?;
         Ok(())
     }
 
-    fn rewrite_wsl_sqlite(
-        &self,
-        target: &TargetContext,
-        target_provider: &str,
-        session_ids: HashSet<String>,
-    ) -> AppResult<()> {
+    fn rewrite_wsl_sqlite(&self, target: &TargetContext, target_provider: &str) -> AppResult<()> {
         let environment = target.wsl_environment.as_ref().expect("WSL 环境不存在");
         let codex_linux_path = target
             .codex_linux_path
@@ -278,7 +234,6 @@ impl SessionMigrationService {
 
         let payload = WslMigrationPayload {
             model_provider: target_provider.to_string(),
-            session_ids: session_ids.into_iter().collect(),
         };
         fs::write(&windows_payload_path, serde_json::to_vec(&payload)?)?;
 
@@ -331,7 +286,6 @@ impl SessionMigrationService {
 #[serde(rename_all = "PascalCase")]
 struct WslMigrationPayload {
     model_provider: String,
-    session_ids: Vec<String>,
 }
 
 #[cfg(test)]

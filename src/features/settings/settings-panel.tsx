@@ -131,14 +131,10 @@ export function SettingsPanel() {
 
           <div className="grid gap-3 rounded-md border border-border bg-slate-50/70 p-4 sm:grid-cols-2">
             <div className="space-y-2">
-              <Label htmlFor="migrationDays">Session migration days</Label>
-              <Input
-                id="migrationDays"
-                max={30}
-                min={0}
-                type="number"
-                {...form.register("sessionMigrationDays", { valueAsNumber: true })}
-              />
+              <Label>对话保护范围</Label>
+              <div className="rounded-md border border-border bg-white/80 px-3 py-2 text-sm text-muted-foreground">
+                全部活动与归档对话
+              </div>
             </div>
             <div className="space-y-2">
               <Label>默认 WSL 检测</Label>
@@ -243,7 +239,6 @@ function toSettingsFormValues(bootstrap: AppBootstrap): SettingsFormValues {
     replaceWslTarget: bootstrap.settings.replaceWslTarget,
     wslDistroName: bootstrap.settings.wslDistroName ?? "",
     wslUserName: bootstrap.settings.wslUserName ?? "",
-    sessionMigrationDays: bootstrap.settings.sessionMigrationDays,
     apiKeyProviderName: bootstrap.settings.apiKeyProviderName,
     sidebarCollapsed: bootstrap.settings.uiPreferences.sidebarCollapsed,
   };
@@ -255,7 +250,6 @@ function toSettingsPayload(values: SettingsFormValues): SaveSettingsInput {
     replaceWslTarget: values.replaceWslTarget,
     wslDistroName: values.wslDistroName || null,
     wslUserName: values.wslUserName || null,
-    sessionMigrationDays: values.sessionMigrationDays,
     apiKeyProviderName: values.apiKeyProviderName,
     uiPreferences: {
       sidebarCollapsed: values.sidebarCollapsed,

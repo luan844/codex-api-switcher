@@ -3,7 +3,7 @@
 [![Windows Tauri Build](https://github.com/luan844/codex-api-switcher/actions/workflows/windows-tauri-release.yml/badge.svg)](https://github.com/luan844/codex-api-switcher/actions/workflows/windows-tauri-release.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
-Windows 10/11 x64 桌面工具，用于在 Codex 中管理和切换自定义 Responses API Provider。所有 Provider 的 API 地址、API Key、模型列表和默认模型均可直接在软件界面修改，无需手工编辑 Codex 配置文件。
+Windows 10/11 x64 桌面工具，用于在 Codex 中切换自定义 Responses API Provider，同时完整保留本地活动对话、归档对话和历史索引。API 地址、API Key、模型列表和默认模型均可直接在软件界面修改，无需手工编辑 Codex 配置文件，也无需放弃原有对话。
 
 > 本项目是非官方社区工具，与 OpenAI、Codex 或 AIVR 无隶属或授权关系。使用前请确认第三方 API 服务可信，并妥善保存切换器创建的备份。
 
@@ -15,8 +15,9 @@ Windows 10/11 x64 桌面工具，用于在 Codex 中管理和切换自定义 Res
 - 使用 Windows DPAPI 加密本工具保存的 API Key
 - 结构化更新 Codex `config.toml`、`auth.json` 和模型目录
 - 保留与本工具无关的 MCP、Skills、沙箱及其他 TOML 配置
-- 切换前备份配置、认证、模型目录、会话 JSONL 和 `state_5.sqlite`
-- 迁移最近指定天数内会话的 `model_provider`
+- 切换前完整备份配置、认证、模型目录、全部会话 JSONL 和 `state_5.sqlite`
+- 同步 `sessions` 与 `archived_sessions` 中全部本地对话的 `model_provider`
+- 备份 `session_index.jsonl`，并在 SQLite 事务中同步全部会话索引，使切换后历史对话继续显示
 - 支持冲突检查、失败回滚、备份恢复和官方 OpenAI 模式恢复
 - 恢复官方模式时保留 ChatGPT 订阅认证和历史会话索引
 - 检测、关闭和重启 Codex Desktop
@@ -34,7 +35,7 @@ Windows 10/11 x64 桌面工具，用于在 Codex 中管理和切换自定义 Res
 1. 打开“Provider 工作台”，新建一个 Provider。
 2. 填写 Provider ID、Base URL、API Key、默认模型和模型列表。
 3. 先执行“获取模型”或“测试连接”。
-4. 点击“切换并重启 Codex”，确认预检和备份范围。
+4. 点击“切换并重启 Codex”，确认全部活动与归档对话的备份范围。
 5. 需要撤销时，在“备份恢复”中恢复指定备份，或执行“恢复官方 OpenAI”。
 
 远程 Base URL 必须使用 HTTPS。为方便本地代理开发，`localhost`、`127.0.0.1` 和 `::1` 可使用 HTTP。

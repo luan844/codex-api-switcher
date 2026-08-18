@@ -90,7 +90,6 @@ fn default_true() -> bool {
 #[serde(rename_all = "camelCase", default)]
 pub struct SwitcherSettings {
     pub codex_home_override: Option<String>,
-    pub session_migration_days: u32,
     pub backup_retention: usize,
     pub inject_models_default: bool,
 }
@@ -99,7 +98,6 @@ impl Default for SwitcherSettings {
     fn default() -> Self {
         Self {
             codex_home_override: None,
-            session_migration_days: 3,
             backup_retention: 10,
             inject_models_default: true,
         }
@@ -110,7 +108,6 @@ impl Default for SwitcherSettings {
 #[serde(rename_all = "camelCase")]
 pub struct SaveSettingsInput {
     pub codex_home_override: Option<String>,
-    pub session_migration_days: u32,
     pub backup_retention: usize,
     pub inject_models_default: bool,
 }
@@ -250,7 +247,6 @@ pub struct SwitchPreview {
     pub provider_id: String,
     pub codex_home: String,
     pub files_to_backup: Vec<String>,
-    pub session_migration_days: u32,
     pub codex_running: bool,
     pub will_restart_codex: bool,
     pub will_inject_models: bool,

@@ -464,16 +464,6 @@ impl<'a> ProfileStore<'a> {
             changed = true;
         }
 
-        let normalized_days = if database.session_migration_days < 0 {
-            3
-        } else {
-            database.session_migration_days.clamp(0, 30)
-        };
-        if database.session_migration_days != normalized_days {
-            database.session_migration_days = normalized_days;
-            changed = true;
-        }
-
         if database.migration_version != CURRENT_MIGRATION_VERSION {
             database.migration_version = CURRENT_MIGRATION_VERSION;
             changed = true;
@@ -591,7 +581,6 @@ mod tests {
         let mut database = ProfileDatabase::default();
         database.replace_windows_target = false;
         database.replace_wsl_target = false;
-        database.session_migration_days = 99;
         database.api_key_provider_name = "   ".into();
         database.migration_version = 0;
 
@@ -606,7 +595,6 @@ mod tests {
 
         assert!(loaded.replace_windows_target);
         assert!(!loaded.replace_wsl_target);
-        assert_eq!(loaded.session_migration_days, 30);
         assert_eq!(loaded.api_key_provider_name, DEFAULT_APIKEY_PROVIDER_NAME);
         assert_eq!(loaded.migration_version, CURRENT_MIGRATION_VERSION);
         assert!(paths.data_root.join("migration-backups").exists());

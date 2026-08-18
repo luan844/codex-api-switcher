@@ -38,7 +38,6 @@ export interface SettingsSnapshot {
   wslUserName?: string | null;
   cachedDefaultWsl?: CachedWslEnvironmentInfo | null;
   cachedDefaultWslErrorMessage?: string | null;
-  sessionMigrationDays: number;
   apiKeyProviderName: string;
   uiPreferences: UiPreferences;
   migrationVersion: number;
@@ -121,7 +120,6 @@ export interface SaveSettingsInput {
   replaceWslTarget: boolean;
   wslDistroName?: string | null;
   wslUserName?: string | null;
-  sessionMigrationDays: number;
   apiKeyProviderName: string;
   uiPreferences: UiPreferences;
 }

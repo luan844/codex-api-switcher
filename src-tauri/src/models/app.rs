@@ -35,7 +35,6 @@ pub struct SettingsSnapshot {
     pub wsl_user_name: Option<String>,
     pub cached_default_wsl: Option<CachedWslEnvironmentInfo>,
     pub cached_default_wsl_error_message: Option<String>,
-    pub session_migration_days: i32,
     pub api_key_provider_name: String,
     pub ui_preferences: UiPreferences,
     pub migration_version: u32,
@@ -48,7 +47,6 @@ pub struct SaveSettingsInput {
     pub replace_wsl_target: bool,
     pub wsl_distro_name: Option<String>,
     pub wsl_user_name: Option<String>,
-    pub session_migration_days: i32,
     pub api_key_provider_name: String,
     pub ui_preferences: UiPreferences,
 }

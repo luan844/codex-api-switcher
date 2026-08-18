@@ -158,7 +158,6 @@ impl<'a> SwitcherStore<'a> {
             }
         }
         database.settings.codex_home_override = codex_home_override;
-        database.settings.session_migration_days = input.session_migration_days.min(30);
         database.settings.backup_retention = input.backup_retention.clamp(1, 50);
         database.settings.inject_models_default = input.inject_models_default;
         self.save(&database)?;

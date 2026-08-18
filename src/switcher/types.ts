@@ -19,7 +19,6 @@ export interface ProviderProfile {
 
 export interface SwitcherSettings {
   codexHomeOverride?: string | null;
-  sessionMigrationDays: number;
   backupRetention: number;
   injectModelsDefault: boolean;
 }
@@ -84,7 +83,6 @@ export interface SwitchPreview {
   providerId: string;
   codexHome: string;
   filesToBackup: string[];
-  sessionMigrationDays: number;
   codexRunning: boolean;
   willRestartCodex: boolean;
   willInjectModels: boolean;

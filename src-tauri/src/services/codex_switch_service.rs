@@ -127,7 +127,6 @@ impl<'a> CodexSwitchService<'a> {
 
         if let Err(error) = self.execute_switch_pipeline(
             &profile,
-            &database,
             &provider_name,
             &targets,
             &backup_service,
@@ -185,7 +184,6 @@ impl<'a> CodexSwitchService<'a> {
     fn execute_switch_pipeline(
         &self,
         profile: &CodexProfile,
-        database: &ProfileDatabase,
         provider_name: &str,
         targets: &[TargetContext],
         backup_service: &BackupService,
@@ -237,12 +235,9 @@ impl<'a> CodexSwitchService<'a> {
         }
 
         for snapshot in &backup_snapshots {
-            if let Err(error) = session_service.migrate(
-                &snapshot.target,
-                profile.provider_category,
-                provider_name,
-                database.session_migration_days,
-            ) {
+            if let Err(error) =
+                session_service.migrate(&snapshot.target, profile.provider_category, provider_name)
+            {
                 self.rollback_snapshots(backup_service, &touched_snapshots, steps);
                 return Err(error);
             }
@@ -250,7 +245,7 @@ impl<'a> CodexSwitchService<'a> {
                 steps,
                 "migrate sessions",
                 format!(
-                    "{} 的 sessions/state_5.sqlite 迁移完成。",
+                    "{} 的活动对话、归档对话和 state_5.sqlite 迁移完成。",
                     snapshot.target.display_name
                 ),
                 SwitchStepStatus::Success,

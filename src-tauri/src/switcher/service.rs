@@ -4,7 +4,7 @@ use std::io::{Read, Write};
 use std::net::TcpListener;
 use std::path::{Path, PathBuf};
 use std::process::Command;
-use std::time::{Duration, Instant, SystemTime};
+use std::time::{Duration, Instant};
 
 use chrono::Utc;
 use reqwest::StatusCode;
@@ -99,9 +99,10 @@ pub fn preview_switch(paths: &SwitcherPaths, profile_id: &str) -> ApiResult<Swit
             "auth.json".to_string(),
             catalog_relative_path(&profile.provider_id),
             "state_5.sqlite".to_string(),
+            "session_index.jsonl".to_string(),
             "sessions/**/*.jsonl".to_string(),
+            "archived_sessions/**/*.jsonl".to_string(),
         ],
-        session_migration_days: database.settings.session_migration_days,
         codex_running: codex_is_running(),
         will_restart_codex: true,
         will_inject_models: profile.inject_models,
@@ -292,7 +293,6 @@ pub async fn execute_switch(
         "switch",
         Some(&profile),
         database.active_provider_id.as_deref(),
-        database.settings.session_migration_days,
     )?;
     write_transaction_marker(paths, &manifest.id, "backup-complete")?;
     steps.push(step(
@@ -304,11 +304,7 @@ pub async fn execute_switch(
     let apply_result = (|| -> ApiResult<Vec<String>> {
         apply_provider_files(&database, &profile, &codex_home, &store)?;
         update_transaction_stage(paths, &manifest.id, "config-written")?;
-        let migrated = migrate_sessions(
-            &codex_home,
-            &profile.provider_id,
-            database.settings.session_migration_days,
-        )?;
+        let migrated = migrate_sessions(&codex_home, &profile.provider_id)?;
         update_transaction_stage(paths, &manifest.id, "sessions-migrated")?;
         Ok(migrated)
     })();
@@ -506,16 +502,11 @@ pub async fn restore_official(
         "restoreOfficial",
         None,
         database.active_provider_id.as_deref(),
-        database.settings.session_migration_days,
     )?;
     write_transaction_marker(paths, &manifest.id, "backup-complete")?;
     let restore_result = (|| -> ApiResult<Vec<String>> {
         merge_official_snapshot(&database, &codex_home)?;
-        migrate_sessions(
-            &codex_home,
-            "openai",
-            database.settings.session_migration_days,
-        )
+        migrate_sessions(&codex_home, "openai")
     })();
     let migrated = match restore_result {
         Ok(value) => value,
@@ -1188,11 +1179,8 @@ fn load_native_model_templates(codex_home: &Path) -> HashMap<String, Value> {
         .collect()
 }
 
-fn migrate_sessions(codex_home: &Path, provider_id: &str, days: u32) -> ApiResult<Vec<String>> {
-    if days == 0 {
-        return Ok(Vec::new());
-    }
-    let session_files = collect_session_files(codex_home, days)?;
+fn migrate_sessions(codex_home: &Path, provider_id: &str) -> ApiResult<Vec<String>> {
+    let session_files = collect_session_files(codex_home)?;
     let mut session_ids = Vec::new();
     for path in session_files {
         let text = fs::read_to_string(&path).map_err(|error| {
@@ -1252,17 +1240,13 @@ fn migrate_sessions(codex_home: &Path, provider_id: &str, days: u32) -> ApiResul
             session_ids.push(session_id);
         }
     }
-    update_state_database(codex_home, provider_id, &session_ids)?;
+    update_state_database(codex_home, provider_id)?;
     Ok(session_ids)
 }
 
-fn update_state_database(
-    codex_home: &Path,
-    provider_id: &str,
-    session_ids: &[String],
-) -> ApiResult<()> {
+fn update_state_database(codex_home: &Path, provider_id: &str) -> ApiResult<()> {
     let database_path = codex_home.join("state_5.sqlite");
-    if session_ids.is_empty() || !database_path.exists() {
+    if !database_path.exists() {
         return Ok(());
     }
     let mut connection = Connection::open_with_flags(
@@ -1301,50 +1285,36 @@ fn update_state_database(
         return Ok(());
     }
     let transaction = connection.transaction().map_err(sqlite_error)?;
-    {
-        let mut statement = transaction
-            .prepare("UPDATE threads SET model_provider = ?1 WHERE id = ?2")
-            .map_err(sqlite_error)?;
-        for session_id in session_ids {
-            statement
-                .execute((provider_id, session_id))
-                .map_err(sqlite_error)?;
-        }
-    }
+    transaction
+        .execute("UPDATE threads SET model_provider = ?1", [provider_id])
+        .map_err(sqlite_error)?;
     transaction.commit().map_err(sqlite_error)
 }
 
-fn collect_session_files(codex_home: &Path, days: u32) -> ApiResult<Vec<PathBuf>> {
-    let root = codex_home.join("sessions");
-    if !root.exists() {
-        return Ok(Vec::new());
-    }
-    let cutoff = SystemTime::now()
-        .checked_sub(Duration::from_secs(u64::from(days) * 24 * 60 * 60))
-        .unwrap_or(SystemTime::UNIX_EPOCH);
+fn collect_session_files(codex_home: &Path) -> ApiResult<Vec<PathBuf>> {
     let mut files = Vec::new();
-    for entry in WalkDir::new(root) {
-        let entry = entry.map_err(|error| {
-            ApiError::detailed(
-                "session_scan_failed",
-                "扫描会话目录失败。",
-                error.to_string(),
-            )
-        })?;
-        if !entry.file_type().is_file()
-            || entry.path().extension().and_then(|value| value.to_str()) != Some("jsonl")
-        {
+    for directory in ["sessions", "archived_sessions"] {
+        let root = codex_home.join(directory);
+        if !root.exists() {
             continue;
         }
-        let modified = entry
-            .metadata()
-            .ok()
-            .and_then(|metadata| metadata.modified().ok())
-            .unwrap_or(SystemTime::UNIX_EPOCH);
-        if modified >= cutoff {
+        for entry in WalkDir::new(root) {
+            let entry = entry.map_err(|error| {
+                ApiError::detailed(
+                    "session_scan_failed",
+                    "扫描本地对话目录失败。",
+                    error.to_string(),
+                )
+            })?;
+            if !entry.file_type().is_file()
+                || entry.path().extension().and_then(|value| value.to_str()) != Some("jsonl")
+            {
+                continue;
+            }
             files.push(entry.path().to_path_buf());
         }
     }
+    files.sort();
     Ok(files)
 }
 
@@ -1354,7 +1324,6 @@ fn create_backup(
     kind: &str,
     profile: Option<&StoredProviderProfile>,
     previous_provider_id: Option<&str>,
-    session_days: u32,
 ) -> ApiResult<BackupManifest> {
     fs::create_dir_all(&paths.backups_root).map_err(|error| {
         ApiError::detailed(
@@ -1377,6 +1346,7 @@ fn create_backup(
         codex_home.join("config.toml"),
         codex_home.join("auth.json"),
         codex_home.join(LEGACY_CATALOG_RELATIVE_PATH),
+        codex_home.join("session_index.jsonl"),
         codex_home.join("state_5.sqlite"),
         codex_home.join("state_5.sqlite-wal"),
         codex_home.join("state_5.sqlite-shm"),
@@ -1387,7 +1357,7 @@ fn create_backup(
     if let Some(provider_id) = previous_provider_id {
         targets.push(codex_home.join(catalog_relative_path(provider_id)));
     }
-    targets.extend(collect_session_files(codex_home, session_days)?);
+    targets.extend(collect_session_files(codex_home)?);
     targets.sort();
     targets.dedup();
 
@@ -2050,6 +2020,7 @@ fn hidden_command(program: &str) -> Command {
 
 #[cfg(test)]
 mod tests {
+    use std::collections::HashSet;
     use std::fs;
     use std::io::{Read, Write};
     use std::net::TcpListener as TestTcpListener;
@@ -2372,15 +2343,23 @@ wire_api = "responses"
     }
 
     #[test]
-    fn session_migration_updates_jsonl_and_sqlite_together() {
+    fn session_migration_updates_all_active_and_archived_conversations() {
         let temp = TempDir::new().unwrap();
         let codex_home = temp.path().join("codex-home");
         let sessions = codex_home.join("sessions/2026/07/22");
+        let archived_sessions = codex_home.join("archived_sessions");
         fs::create_dir_all(&sessions).unwrap();
-        let session_path = sessions.join("session-1.jsonl");
+        fs::create_dir_all(&archived_sessions).unwrap();
+        let session_path = sessions.join("session-active.jsonl");
+        let archived_path = archived_sessions.join("session-archived.jsonl");
         fs::write(
             &session_path,
-            "{\"type\":\"session_meta\",\"payload\":{\"id\":\"thread-1\",\"model_provider\":\"openai\"}}\n{\"type\":\"event\"}\n",
+            "{\"type\":\"session_meta\",\"payload\":{\"id\":\"thread-active\",\"model_provider\":\"openai\"}}\n{\"type\":\"event\"}\n",
+        )
+        .unwrap();
+        fs::write(
+            &archived_path,
+            "{\"type\":\"session_meta\",\"payload\":{\"id\":\"thread-archived\",\"model_provider\":\"openai\"}}\n{\"type\":\"event\"}\n",
         )
         .unwrap();
 
@@ -2395,31 +2374,76 @@ wire_api = "responses"
         connection
             .execute(
                 "INSERT INTO threads (id, model_provider) VALUES (?1, ?2)",
-                ("thread-1", "openai"),
+                ("thread-active", "openai"),
+            )
+            .unwrap();
+        connection
+            .execute(
+                "INSERT INTO threads (id, model_provider) VALUES (?1, ?2)",
+                ("thread-archived", "openai"),
+            )
+            .unwrap();
+        connection
+            .execute(
+                "INSERT INTO threads (id, model_provider) VALUES (?1, ?2)",
+                ("thread-index-only", "openai"),
             )
             .unwrap();
         drop(connection);
 
-        let migrated = migrate_sessions(&codex_home, "example", 3).unwrap();
-        assert_eq!(migrated, vec!["thread-1"]);
-        let first_line = fs::read_to_string(&session_path)
-            .unwrap()
-            .lines()
-            .next()
-            .unwrap()
-            .to_string();
-        let metadata: Value = serde_json::from_str(&first_line).unwrap();
-        assert_eq!(metadata["payload"]["model_provider"], "example");
+        let migrated = migrate_sessions(&codex_home, "example").unwrap();
+        let migrated: HashSet<_> = migrated.into_iter().collect();
+        assert_eq!(
+            migrated,
+            HashSet::from(["thread-active".to_string(), "thread-archived".to_string()])
+        );
+        for path in [&session_path, &archived_path] {
+            let first_line = fs::read_to_string(path)
+                .unwrap()
+                .lines()
+                .next()
+                .unwrap()
+                .to_string();
+            let metadata: Value = serde_json::from_str(&first_line).unwrap();
+            assert_eq!(metadata["payload"]["model_provider"], "example");
+        }
 
         let connection = Connection::open(&database_path).unwrap();
-        let provider: String = connection
-            .query_row(
-                "SELECT model_provider FROM threads WHERE id = ?1",
-                ["thread-1"],
-                |row| row.get(0),
-            )
-            .unwrap();
-        assert_eq!(provider, "example");
+        for thread_id in ["thread-active", "thread-archived", "thread-index-only"] {
+            let provider: String = connection
+                .query_row(
+                    "SELECT model_provider FROM threads WHERE id = ?1",
+                    [thread_id],
+                    |row| row.get(0),
+                )
+                .unwrap();
+            assert_eq!(provider, "example");
+        }
+    }
+
+    #[test]
+    fn backup_includes_all_active_and_archived_conversations() {
+        let temp = TempDir::new().unwrap();
+        let paths = test_paths(&temp);
+        let codex_home = temp.path().join("codex-home");
+        let active_path = codex_home.join("sessions/2025/01/01/active.jsonl");
+        let archived_path = codex_home.join("archived_sessions/archived.jsonl");
+        fs::create_dir_all(active_path.parent().unwrap()).unwrap();
+        fs::create_dir_all(archived_path.parent().unwrap()).unwrap();
+        fs::write(&active_path, "{}\n").unwrap();
+        fs::write(&archived_path, "{}\n").unwrap();
+        fs::write(codex_home.join("session_index.jsonl"), "{}\n").unwrap();
+
+        let manifest = create_backup(&paths, &codex_home, "test", None, None).unwrap();
+        let relative_paths: HashSet<_> = manifest
+            .files
+            .iter()
+            .map(|record| record.relative_path.as_str())
+            .collect();
+
+        assert!(relative_paths.contains("sessions/2025/01/01/active.jsonl"));
+        assert!(relative_paths.contains("archived_sessions/archived.jsonl"));
+        assert!(relative_paths.contains("session_index.jsonl"));
     }
 
     #[test]
@@ -2431,7 +2455,7 @@ wire_api = "responses"
         let config_path = codex_home.join("config.toml");
         fs::write(&config_path, "model = \"official\"\n").unwrap();
 
-        let mut manifest = create_backup(&paths, &codex_home, "test", None, None, 0).unwrap();
+        let mut manifest = create_backup(&paths, &codex_home, "test", None, None).unwrap();
         fs::write(&config_path, "model = \"custom\"\n").unwrap();
         finalize_manifest(&paths, &codex_home, &mut manifest).unwrap();
         fs::write(&config_path, "model = \"external-change\"\n").unwrap();

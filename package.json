@@ -1,7 +1,8 @@
 {
   "name": "codex-api-switcher",
   "private": true,
-  "version": "0.1.2",
+  "version": "0.1.3",
+  "description": "Switch Codex API providers while preserving every local and archived conversation.",
   "license": "MIT",
   "repository": {
     "type": "git",

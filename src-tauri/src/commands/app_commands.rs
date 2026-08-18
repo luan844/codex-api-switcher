@@ -95,7 +95,6 @@ pub fn update_settings(
         .wsl_user_name
         .map(|item| item.trim().to_string())
         .filter(|item| !item.is_empty());
-    database.session_migration_days = payload.session_migration_days.clamp(0, 30);
     database.api_key_provider_name = payload.api_key_provider_name.trim().to_string();
     database.ui_preferences = payload.ui_preferences;
     store.save(&database).map_err(|error| error.to_dto())?;
@@ -475,7 +474,6 @@ fn build_settings_snapshot(
                 user_name: item.user_name,
             }),
         cached_default_wsl_error_message: database.cached_default_wsl_error_message.clone(),
-        session_migration_days: database.session_migration_days,
         api_key_provider_name: database.api_key_provider_name.clone(),
         ui_preferences: database.ui_preferences.clone(),
         migration_version: database.migration_version,

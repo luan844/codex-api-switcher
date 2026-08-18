@@ -5,7 +5,6 @@ export const settingsFormSchema = z.object({
   replaceWslTarget: z.boolean(),
   wslDistroName: z.string().optional().nullable(),
   wslUserName: z.string().optional().nullable(),
-  sessionMigrationDays: z.number().min(0).max(30),
   apiKeyProviderName: z
     .string()
     .min(1)
