@@ -189,14 +189,20 @@ jobs:
       - name: Build Windows bundles
         run: npm run build:windows
 
+      - name: Prepare release artifacts
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force release-artifacts | Out-Null
+          Copy-Item src-tauri/target/release/codex-api-switcher.exe release-artifacts/Codex-API-Switcher-Portable.exe
+          Get-ChildItem src-tauri/target/release/bundle/nsis/*.exe | Copy-Item -Destination release-artifacts
+
       - name: Upload Windows bundle artifacts
         uses: actions/upload-artifact@v6
         with:
           compression-level: 0
           name: codex-api-switcher-windows-bundles
           if-no-files-found: error
-          path: |
-            src-tauri/target/release/bundle/nsis/*.exe
+          path: release-artifacts/*.exe
 
   publish-release:
     name: Publish GitHub Release
@@ -226,9 +232,10 @@ jobs:
           tag="${{ needs.resolve-release-meta.outputs.release_tag }}"
           version="${{ needs.resolve-release-meta.outputs.release_version }}"
           repo="${{ github.repository }}"
+          (cd release-artifacts && sha256sum *.exe > SHA256SUMS.txt)
 
           if gh release view "$tag" --repo "$repo" >/dev/null 2>&1; then
-            gh release upload "$tag" release-artifacts/*.exe --repo "$repo" --clobber
+            gh release upload "$tag" release-artifacts/*.exe release-artifacts/SHA256SUMS.txt --repo "$repo" --clobber
           else
-            gh release create "$tag" release-artifacts/*.exe --repo "$repo" --verify-tag --title "Codex API Switcher $version" --generate-notes
+            gh release create "$tag" release-artifacts/*.exe release-artifacts/SHA256SUMS.txt --repo "$repo" --verify-tag --title "Codex API Switcher $version" --generate-notes
           fi
