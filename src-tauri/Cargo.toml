@@ -1,0 +1,49 @@
+[package]
+name = "codex-api-switcher"
+version = "0.1.2"
+description = "Windows desktop utility for switching Codex API providers"
+license = "MIT"
+edition = "2021"
+
+[lib]
+name = "codex_api_switcher_core"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[dependencies]
+base64 = "0.22.1"
+chrono = { version = "0.4.42", features = ["clock", "serde"] }
+dirs = "6.0.0"
+regex = "1.12.2"
+reqwest = { version = "0.12.24", default-features = false, features = ["json", "rustls-tls"] }
+rusqlite = { version = "0.37.0", features = ["bundled"] }
+serde = { version = "1.0.228", features = ["derive"] }
+serde_json = "1.0.145"
+sha2 = "0.10.9"
+tauri = { version = "2.10.3", default-features = false, features = ["wry", "compression", "dynamic-acl"] }
+tauri-plugin-log = "2.8.0"
+thiserror = "2.0.17"
+tokio = { version = "1", features = ["sync", "time", "rt-multi-thread", "macros"] }
+toml = "0.8.23"
+toml_edit = "0.22.27"
+tokio-tungstenite = "0.26.2"
+futures-util = "0.3.31"
+uuid = { version = "1.18.1", features = ["serde", "v4"] }
+walkdir = "2.5.0"
+
+[target.'cfg(windows)'.dependencies]
+windows = { version = "0.61.3", features = ["Win32_Foundation", "Win32_Security_Cryptography", "Win32_System_Com", "Win32_System_Memory", "Win32_UI_Controls_Dialogs", "Win32_UI_Shell", "Win32_Storage_FileSystem"] }
+
+[dev-dependencies]
+tempfile = "3.23.0"
+
+[build-dependencies]
+tauri-build = { version = "2.5.6" }
+
+[profile.dev]
+incremental = true
+
+[profile.test]
+incremental = true
+
+[profile.release]
+incremental = true

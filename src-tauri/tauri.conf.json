@@ -1,0 +1,51 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "Codex API Switcher",
+  "version": "0.1.2",
+  "identifier": "com.codexapiswitcher.desktop",
+  "build": {
+    "beforeDevCommand": "npm run dev",
+    "beforeBuildCommand": "node ./tooling/scripts/tauri-before-build.cjs",
+    "devUrl": "http://localhost:1420",
+    "frontendDist": "../dist"
+  },
+  "app": {
+    "withGlobalTauri": false,
+    "windows": [
+      {
+        "label": "main",
+        "title": "Codex API Switcher",
+        "width": 1280,
+        "height": 820,
+        "minWidth": 1040,
+        "minHeight": 700,
+        "resizable": true,
+        "fullscreen": false,
+        "decorations": false,
+        "center": true
+      }
+    ]
+  },
+  "bundle": {
+    "active": true,
+    "category": "DeveloperTool",
+    "targets": [
+      "nsis"
+    ],
+    "shortDescription": "Switch Codex between official and custom Responses API providers",
+    "longDescription": "Manage custom Codex API endpoints, models, backups, session migration and Codex Desktop integration.",
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.ico",
+      "icons/icon.icns"
+    ],
+    "windows": {
+      "digestAlgorithm": "sha256",
+      "nsis": {
+        "installerIcon": "icons/icon.ico"
+      }
+    }
+  }
+}
